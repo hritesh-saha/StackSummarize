@@ -7,19 +7,21 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+# Load environment variables
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-STACK_EXCHANGE_API_BASE = os.getenv("STACK_EXCHANGE_API_BASE")
+STACK_EXCHANGE_API_BASE = os.getenv("STACK_EXCHANGE_API_BASE", "https://api.stackexchange.com/2.3")
 
 if not GEMINI_API_KEY:
     raise ValueError("Gemini API key is missing! Check your .env file.")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
+# Initialize FastAPI app
 app = FastAPI()
 
-# Enable CORS (Allow all origins)
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,32 +34,51 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
 
-# Function to scrape Stack Overflow
+# Function to refine query using Gemini (ensures one-line output)
+def refine_query(query: str) -> str:
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    system_instruction = "Rewrite this query as a concise, Stack Overflow-friendly search term. Output only the refined search term, nothing else."
+    
+    response = model.generate_content(f"{system_instruction}\n\nUser Query: {query}")
+    
+    refined_query = response.text.strip().split("\n")[0]  # Ensure single-line output
+    print(f"🔍 Gemini Refined Query: {refined_query}")  # Debugging
+    return refined_query
+
+# Function to scrape Stack Overflow and get top-voted answer
 def scrape_stackoverflow(query: str) -> str:
-    query = query.strip().lower()  # Normalize query
-    search_url = f"{STACK_EXCHANGE_API_BASE}/search?order=desc&sort=relevance&intitle={query}&site=stackoverflow"
+    refined_query = refine_query(query)
+    search_url = f"{STACK_EXCHANGE_API_BASE}/search?order=desc&sort=relevance&intitle={refined_query}&tagged=python&site=stackoverflow"
+    
+    print(f"🔍 Stack Overflow Search URL: {search_url}")  # Debugging
 
     try:
         response = requests.get(search_url).json()
         print("🔎 Stack Overflow Search Response:", response)  # Debugging
 
         if "items" in response and response["items"]:
-            top_result = response["items"][0]  # First relevant result
-            question_id = top_result.get("question_id")
+            # Find the first question with at least one answer
+            for item in response["items"]:
+                if item.get("is_answered") and item.get("answer_count", 0) > 0:
+                    question_id = item.get("question_id")
+                    break
+            else:
+                return "No relevant answer found. Try rewording your query."
 
-            if question_id:
-                # Fetch answers for the question
-                answer_url = f"{STACK_EXCHANGE_API_BASE}/questions/{question_id}/answers?order=desc&sort=votes&site=stackoverflow&filter=withbody"
-                answer_data = requests.get(answer_url).json()
-                print("📌 Top Answer Response:", answer_data)  # Debugging
+            answer_url = f"{STACK_EXCHANGE_API_BASE}/questions/{question_id}/answers?order=desc&sort=votes&site=stackoverflow&filter=withbody"
+            
+            print(f"📌 Fetching answers from: {answer_url}")  # Debugging
+            
+            answer_data = requests.get(answer_url).json()
+            print("📌 Top Answer Response:", answer_data)  # Debugging
 
-                if "items" in answer_data and answer_data["items"]:
-                    # Get the top-voted answer
-                    answer_body = BeautifulSoup(answer_data["items"][0]["body"], "html.parser").text
-                    return answer_body
+            if "items" in answer_data and answer_data["items"]:
+                # Extract and clean the answer content
+                answer_body = BeautifulSoup(answer_data["items"][0]["body"], "html.parser").text.strip()
+                return answer_body
 
     except requests.exceptions.RequestException as e:
-        print("Error while fetching Stack Overflow data:", e)
+        print("❌ Error while fetching Stack Overflow data:", e)
         return "Error fetching data from Stack Overflow."
 
     return "No relevant answer found. Try rewording your query."
@@ -65,7 +86,8 @@ def scrape_stackoverflow(query: str) -> str:
 # Function to summarize response using Gemini
 def summarize_text(text: str) -> str:
     model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(f"Summarize this in simple terms:\n{text}")
+    response = model.generate_content(f"Summarize this in simple terms while keeping any code snippets:\n\n{text}")
+    
     return response.text.strip()
 
 # API Endpoint
@@ -86,5 +108,6 @@ async def ask(request: QueryRequest):
 
     summarized_answer = summarize_text(stackoverflow_answer)
     return {"answer": summarized_answer}
+
 
 # Run with: uvicorn server:app --reload
