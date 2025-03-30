@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { FaSearch, FaVolumeUp, FaStop } from "react-icons/fa";
+import { FaSearch, FaVolumeUp, FaStop, FaMicrophone } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -56,6 +56,16 @@ function SearchAssistant() {
     setSpeech(null);
   };
 
+  const handleVoiceInput = () => {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.start();
+
+    recognition.onresult = (event) => {
+      setQuery(event.results[0][0].transcript);
+    };
+  };
+
   return (
     <div className="relative w-full min-h-screen bg-black flex flex-col items-center text-white overflow-hidden">
       <div className="absolute inset-0 z-0 bg-[url('https://source.unsplash.com/1920x1080/?stars,galaxy')] bg-cover bg-center opacity-40"></div>
@@ -83,15 +93,22 @@ function SearchAssistant() {
           "Less searching, more coding! 🧑‍💻💡"
         </p>
 
-        <div className="w-full max-w-3xl px-6">
+        <div className=" w-[50rem] px-6">
           <div className="flex items-center bg-gray-800 p-4 rounded-full shadow-xl border border-gray-700 focus-within:ring-2 focus-within:ring-blue-500">
             <input
               type="text"
               placeholder="Ask a programming question..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="flex-1 bg-transparent text-white px-4 py-2 rounded-l-full focus:outline-none placeholder-gray-400"
             />
+            <button
+              onClick={handleVoiceInput}
+              className="px-4 py-2 mr-2 bg-red-500 text-white cursor-pointer rounded-full hover:bg-red-600 transition flex items-center gap-2 shadow-lg"
+            >
+              <FaMicrophone />
+            </button>
             <button
               onClick={handleSearch}
               className="px-6 py-2 bg-blue-500 text-white cursor-pointer rounded-full hover:bg-blue-600 transition flex items-center gap-2 shadow-lg"

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-STACK_EXCHANGE_API_BASE = os.getenv("STACK_EXCHANGE_API_BASE", "https://api.stackexchange.com/2.3")
+STACK_EXCHANGE_API_BASE = os.getenv("STACK_EXCHANGE_API_BASE")
 
 if not GEMINI_API_KEY:
     raise ValueError("Gemini API key is missing! Check your .env file.")
@@ -83,10 +83,23 @@ def scrape_stackoverflow(query: str) -> str:
 
     return "No relevant answer found. Try rewording your query."
 
-# Function to summarize response using Gemini
-def summarize_text(text: str) -> str:
+# Function to summarize response using Gemini with full context
+def summarize_text(query: str, text: str) -> str:
     model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(f"Summarize this in simple terms while keeping any code snippets:\n\n{text}")
+    
+    # Provide full context to Gemini
+    prompt = f"""You are a helpful AI assistant. A user asked the following query:
+
+    "{query}"
+
+    Below is the most relevant answer from Stack Overflow:
+
+    "{text}"
+
+    Now, generate a response that correctly answers the user's query in a simple and accurate manner, keeping code snippets intact if any.
+    """
+
+    response = model.generate_content(prompt)
     
     return response.text.strip()
 
@@ -106,8 +119,9 @@ async def ask(request: QueryRequest):
     if stackoverflow_answer.startswith("Error fetching data"):
         return {"answer": "There was an issue retrieving data. Please try again later."}
 
-    summarized_answer = summarize_text(stackoverflow_answer)
+    # Send both query and answer to Gemini for better contextual response
+    summarized_answer = summarize_text(query, stackoverflow_answer)
+    
     return {"answer": summarized_answer}
-
 
 # Run with: uvicorn server:app --reload
