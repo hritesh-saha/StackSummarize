@@ -34,21 +34,33 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
 
-# Function to refine query using Gemini (ensures one-line output)
-def refine_query(query: str) -> str:
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    system_instruction = "Rewrite this query as a concise, Stack Overflow-friendly search term. Output only the refined search term, nothing else."
+
+# def refine_query(query: str) -> str:
+#     model = genai.GenerativeModel("gemini-2.0-flash")
+#     system_instruction = (
+#         "Rewrite this query into a well-structured Stack Overflow question that follows best practices for effective search. "
+#         "Ensure it is specific, concise, and formatted like a typical Stack Overflow question. "
+#         "Use relevant keywords, programming terms, and common Stack Overflow phrasing. "
+#         "Frame it as a clear problem statement, avoiding unnecessary words. "
+#         "For example:\n"
+#         "- Instead of 'sorting an array in Python', use 'How to sort a list in Python?'\n"
+#         "- Instead of 'adding an element in ArrayList in Java', use 'How to add an element to an ArrayList in Java?'\n"
+#         "- Use technical keywords relevant to Stack Overflow tags.\n"
+#         "- Frame it as a problem-solving question (e.g., 'What is the best way to merge two dictionaries in Python?').\n"
+#         "Output only the refined query, nothing else."
+#     )
+
+#     response = model.generate_content(f"{system_instruction}\n\nUser Query: {query}")
     
-    response = model.generate_content(f"{system_instruction}\n\nUser Query: {query}")
-    
-    refined_query = response.text.strip().split("\n")[0]  # Ensure single-line output
-    print(f"🔍 Gemini Refined Query: {refined_query}")  # Debugging
-    return refined_query
+#     refined_query = response.text.strip().split("\n")[0]  # Ensure single-line output
+#     print(f"🔍 Gemini Refined Query: {refined_query}")  # Debugging
+#     return refined_query
+
 
 # Function to scrape Stack Overflow and get top-voted answer
 def scrape_stackoverflow(query: str) -> str:
-    refined_query = refine_query(query)
-    search_url = f"{STACK_EXCHANGE_API_BASE}/search?order=desc&sort=relevance&intitle={refined_query}&tagged=python&site=stackoverflow"
+    # refined_query = refine_query(query)
+    search_url = f"{STACK_EXCHANGE_API_BASE}/search?order=desc&sort=relevance&intitle={query}&site=stackoverflow"
     
     print(f"🔍 Stack Overflow Search URL: {search_url}")  # Debugging
 
@@ -83,25 +95,54 @@ def scrape_stackoverflow(query: str) -> str:
 
     return "No relevant answer found. Try rewording your query."
 
-# Function to summarize response using Gemini with full context
+# Initialize the generative model with system instructions
+model = genai.GenerativeModel("gemini-2.0-flash", system_instruction="""
+    AI Text Summarizer for Stack Overflow Answers
+
+    Role: Expert Technical Summarizer
+
+    Responsibilities:
+    You are an expert in summarizing Stack Overflow answers into beginner-friendly explanations. Your role is to:
+
+    - **Simplify complex explanations** while keeping technical accuracy.
+    - **Maintain code snippets** exactly as they are with proper indentation.
+    - **Provide concise yet helpful summaries** so the user quickly understands the key points.
+    - **Exclude unnecessary details** while ensuring clarity.
+
+    Guidelines:
+    - If the answer contains a code snippet, **do not modify it**.
+    - Keep the summary **brief but informative**, making it easy for a beginner to grasp.
+    - Avoid redundant details and technical jargon unless necessary.
+""")
+
 def summarize_text(query: str, text: str) -> str:
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    """
+    Summarizes a Stack Overflow response in a beginner-friendly manner 
+    while keeping code snippets unchanged.
     
-    # Provide full context to Gemini
-    prompt = f"""You are a helpful AI assistant. A user asked the following query:
+    Args:
+        query (str): The user's original question.
+        text (str): The most relevant answer from Stack Overflow.
+    
+    Returns:
+        str: A concise and clear summary of the response.
+    """
+    prompt = f"""
+        A user asked the following question:
 
-    "{query}"
+        "{query}"
 
-    Below is the most relevant answer from Stack Overflow:
+        Below is the most relevant answer from Stack Overflow:
 
-    "{text}"
+        "{text}"
 
-    Now, generate a response that correctly answers the user's query in a simple and accurate manner, keeping code snippets intact if any.
+        Summarize this in a beginner-friendly manner while keeping code snippets unchanged.
     """
 
     response = model.generate_content(prompt)
     
     return response.text.strip()
+
 
 # API Endpoint
 @app.post("/ask")

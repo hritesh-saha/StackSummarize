@@ -3,6 +3,8 @@ import axios from "axios";
 import { FaSearch, FaVolumeUp, FaStop, FaMicrophone } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 
 function SearchAssistant() {
   const [query, setQuery] = useState("");
@@ -57,7 +59,8 @@ function SearchAssistant() {
   };
 
   const handleVoiceInput = () => {
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    const recognition = new (window.SpeechRecognition ||
+      window.webkitSpeechRecognition)();
     recognition.lang = "en-US";
     recognition.start();
 
@@ -72,7 +75,7 @@ function SearchAssistant() {
       <div className="absolute inset-0 z-0 bg-black/50 backdrop-blur-sm"></div>
 
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        {[...Array(15)].map((_, i) => (
+        {[...Array(40)].map((_, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-white rounded-full opacity-80 shooting-star"
@@ -123,8 +126,30 @@ function SearchAssistant() {
             {loading ? (
               <p className="text-yellow-400 animate-pulse">Searching...</p>
             ) : (
-              <div className="prose prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
+              <div className="prose prose-invert overflow-auto">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={{
+                    pre: ({ children }) => (
+                      <pre className=" p-4 bg-gray-800 rounded-md overflow-x-auto border border-gray-700">
+                        <code className="text-sm text-gray-200">{children}</code>
+                      </pre>
+                    ),
+                    code: ({ inline, children }) =>
+                      inline ? (
+                        <code className="px-1 py-0.5 bg-gray-700 rounded">
+                          {children}
+                        </code>
+                      ) : (
+                        <code className="block p-2 bg-gray-800 rounded-md overflow-x-auto">
+                          {children}
+                        </code>
+                      ),
+                  }}
+                >
+                  {response}
+                </ReactMarkdown>
               </div>
             )}
           </div>
