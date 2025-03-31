@@ -7,7 +7,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Load environment variables
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -18,10 +17,8 @@ if not GEMINI_API_KEY:
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Initialize FastAPI app
 app = FastAPI()
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,43 +27,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request body model
 class QueryRequest(BaseModel):
     query: str
 
 
-# def refine_query(query: str) -> str:
-#     model = genai.GenerativeModel("gemini-2.0-flash")
-#     system_instruction = (
-#         "Rewrite this query into a well-structured Stack Overflow question that follows best practices for effective search. "
-#         "Ensure it is specific, concise, and formatted like a typical Stack Overflow question. "
-#         "Use relevant keywords, programming terms, and common Stack Overflow phrasing. "
-#         "Frame it as a clear problem statement, avoiding unnecessary words. "
-#         "For example:\n"
-#         "- Instead of 'sorting an array in Python', use 'How to sort a list in Python?'\n"
-#         "- Instead of 'adding an element in ArrayList in Java', use 'How to add an element to an ArrayList in Java?'\n"
-#         "- Use technical keywords relevant to Stack Overflow tags.\n"
-#         "- Frame it as a problem-solving question (e.g., 'What is the best way to merge two dictionaries in Python?').\n"
-#         "Output only the refined query, nothing else."
-#     )
 
-#     response = model.generate_content(f"{system_instruction}\n\nUser Query: {query}")
-    
-#     refined_query = response.text.strip().split("\n")[0]  # Ensure single-line output
-#     print(f"🔍 Gemini Refined Query: {refined_query}")  # Debugging
-#     return refined_query
-
-
-# Function to scrape Stack Overflow and get top-voted answer
 def scrape_stackoverflow(query: str) -> str:
-    # refined_query = refine_query(query)
     search_url = f"{STACK_EXCHANGE_API_BASE}/search?order=desc&sort=relevance&intitle={query}&site=stackoverflow"
     
-    print(f"🔍 Stack Overflow Search URL: {search_url}")  # Debugging
+    print(f"🔍 Stack Overflow Search URL: {search_url}")
 
     try:
         response = requests.get(search_url).json()
-        print("🔎 Stack Overflow Search Response:", response)  # Debugging
+        print("🔎 Stack Overflow Search Response:", response)
 
         if "items" in response and response["items"]:
             # Find the first question with at least one answer
@@ -79,10 +52,10 @@ def scrape_stackoverflow(query: str) -> str:
 
             answer_url = f"{STACK_EXCHANGE_API_BASE}/questions/{question_id}/answers?order=desc&sort=votes&site=stackoverflow&filter=withbody"
             
-            print(f"📌 Fetching answers from: {answer_url}")  # Debugging
+            print(f"Fetching answers from: {answer_url}")
             
             answer_data = requests.get(answer_url).json()
-            print("📌 Top Answer Response:", answer_data)  # Debugging
+            print("Top Answer Response:", answer_data)
 
             if "items" in answer_data and answer_data["items"]:
                 # Extract and clean the answer content
@@ -90,12 +63,12 @@ def scrape_stackoverflow(query: str) -> str:
                 return answer_body
 
     except requests.exceptions.RequestException as e:
-        print("❌ Error while fetching Stack Overflow data:", e)
+        print("Error while fetching Stack Overflow data:", e)
         return "Error fetching data from Stack Overflow."
 
     return "No relevant answer found. Try rewording your query."
 
-# Initialize the generative model with system instructions
+
 model = genai.GenerativeModel("gemini-2.0-flash", system_instruction="""
     AI Text Summarizer for Stack Overflow Answers
 
@@ -144,7 +117,7 @@ def summarize_text(query: str, text: str) -> str:
     return response.text.strip()
 
 
-# API Endpoint
+
 @app.post("/ask")
 async def ask(request: QueryRequest):
     query = request.query.strip()
@@ -160,7 +133,6 @@ async def ask(request: QueryRequest):
     if stackoverflow_answer.startswith("Error fetching data"):
         return {"answer": "There was an issue retrieving data. Please try again later."}
 
-    # Send both query and answer to Gemini for better contextual response
     summarized_answer = summarize_text(query, stackoverflow_answer)
     
     return {"answer": summarized_answer}
