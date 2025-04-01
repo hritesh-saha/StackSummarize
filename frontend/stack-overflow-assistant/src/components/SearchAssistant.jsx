@@ -126,13 +126,13 @@ function SearchAssistant() {
             {loading ? (
               <p className="text-yellow-400 animate-pulse">Searching...</p>
             ) : (
-              <div className="prose prose-invert overflow-auto">
+              <div className="prose prose-invert overflow-auto text-left">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}
                   components={{
                     pre: ({ children }) => (
-                      <pre className=" p-4 bg-gray-800 rounded-md overflow-x-auto border border-gray-700">
+                      <pre className=" p-4 bg-gray-800 rounded-md overflow-x-auto border mt-3 border-gray-700">
                         <code className="text-sm text-gray-200">{children}</code>
                       </pre>
                     ),

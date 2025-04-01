@@ -69,6 +69,8 @@ def scrape_stackoverflow(query: str) -> str:
     return "No relevant answer found. Try rewording your query."
 
 
+import re
+
 model = genai.GenerativeModel("gemini-2.0-flash", system_instruction="""
     AI Text Summarizer for Stack Overflow Answers
 
@@ -83,22 +85,64 @@ model = genai.GenerativeModel("gemini-2.0-flash", system_instruction="""
     - **Exclude unnecessary details** while ensuring clarity.
 
     Guidelines:
-    - If the answer contains a code snippet, **do not modify it**.
-    - Keep the summary **brief but informative**, making it easy for a beginner to grasp.
-    - Avoid redundant details and technical jargon unless necessary.
+    - **Format the entire response in Markdown.**
+    - **All code should be inside a single fenced code block (` ``` `) with the correct language.**
+    - **All explanations should be normal text, not inside code blocks.**
+    - **Variable names must be bold (`**variable_name**`)**, NOT inside `inline code`.
+    - **Loops and control structures** (e.g., `for loop`, `while loop`) should be bold for emphasis (`**for loop**`).
+    - **Never format explanations as code.** Only the actual code itself should be inside a code block.
 """)
+
+def format_summary(response: str) -> str:
+    """
+    Formats the AI-generated summary to:
+    - Ensure all code is inside a single code block.
+    - Bold variable names and keywords appropriately.
+
+    Args:
+        response (str): The AI-generated response.
+
+    Returns:
+        str: The formatted Markdown-compliant summary.
+    """
+    # Extract all code blocks
+    code_blocks = re.findall(r"```[\s\S]*?```", response)
+    
+    if code_blocks:
+        # Keep only one code block, merging multiple if necessary
+        merged_code = "\n".join([block.strip("```") for block in code_blocks])
+        response = re.sub(r"```[\s\S]*?```", "", response)  # Remove all existing code blocks
+        response += f"\n\n```bash\n{merged_code}\n```\n"  # Reinsert as a single block
+
+    # Bold variable names (avoid inline code formatting)
+    response = re.sub(r"`(\w+)`", r"**\1**", response)  # Change `variable` -> **variable**
+
+    # Bold control structures
+    keywords = [
+        r"\bfor\s+loop\b", 
+        r"\bwhile\s+loop\b", 
+        r"\bdo-while\s+loop\b", 
+        r"\bforeach\s+loop\b", 
+        r"\bloop\b", 
+        r"\biteration\b"
+    ]
+
+    for keyword in keywords:
+        response = re.sub(rf"(?<!`){keyword}(?!`)", lambda m: f"**{m.group(0)}**", response, flags=re.IGNORECASE)
+
+    return response.strip()
 
 def summarize_text(query: str, text: str) -> str:
     """
     Summarizes a Stack Overflow response in a beginner-friendly manner 
-    while keeping code snippets unchanged.
-    
+    while keeping code snippets unchanged and ensuring proper Markdown formatting.
+
     Args:
         query (str): The user's original question.
         text (str): The most relevant answer from Stack Overflow.
-    
+
     Returns:
-        str: A concise and clear summary of the response.
+        str: A properly formatted Markdown summary.
     """
     prompt = f"""
         A user asked the following question:
@@ -109,12 +153,18 @@ def summarize_text(query: str, text: str) -> str:
 
         "{text}"
 
-        Summarize this in a beginner-friendly manner while keeping code snippets unchanged.
+        Summarize this in a beginner-friendly manner with the following rules:
+        - **All code should be inside a single fenced code block (` ``` `)**
+        - **All explanations should be in normal text. Never format explanations as code.**
+        - **Variable names must be bold (`**variable_name**`)**, NOT inside `inline code`.
+        - **Loops and control structures** (e.g., `for loop`, `while loop`) should be bold (`**for loop**`).
+        - Format everything in proper Markdown.
     """
 
     response = model.generate_content(prompt)
     
-    return response.text.strip()
+    return format_summary(response.text.strip())
+
 
 
 
