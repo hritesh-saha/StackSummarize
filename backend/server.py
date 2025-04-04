@@ -106,15 +106,14 @@ Guidelines:
 def format_summary(response: str) -> str:
     """
     Formats the AI-generated summary for clarity, Markdown compliance, and proper code handling.
+    Ensures variable names are bolded only in text, not inside code blocks.
     """
-    # Extract all code blocks
+    # Extract all code blocks and replace them with placeholders
     code_blocks = re.findall(r"```[\s\S]*?```", response)
+    code_placeholders = [f"[[CODE_BLOCK_{i}]]" for i in range(len(code_blocks))]
     
-    if code_blocks:
-        # Keep only one code block, merging multiple if necessary
-        merged_code = "\n".join([block.strip("```") for block in code_blocks])
-        response = re.sub(r"```[\s\S]*?```", "", response)  # Remove all existing code blocks
-        response += f"\n\n```bash\n{merged_code}\n```\n"  # Reinsert as a single block
+    for i, block in enumerate(code_blocks):
+        response = response.replace(block, code_placeholders[i], 1)
 
     # Bold variable names (avoid inline code formatting)
     response = re.sub(r"`(\w+)`", r"**\1**", response)  # Change `variable` -> **variable**
@@ -132,7 +131,12 @@ def format_summary(response: str) -> str:
     for keyword in keywords:
         response = re.sub(rf"(?<!`){keyword}(?!`)", lambda m: f"**{m.group(0)}**", response, flags=re.IGNORECASE)
 
+    # Restore original code blocks
+    for i, block in enumerate(code_blocks):
+        response = response.replace(code_placeholders[i], block, 1)
+
     return response.strip()
+
 
 def summarize_text(query: str, text: str) -> str:
     """

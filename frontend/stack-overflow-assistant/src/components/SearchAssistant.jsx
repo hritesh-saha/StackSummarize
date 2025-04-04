@@ -43,7 +43,6 @@ function SearchAssistant() {
   
     if (speech) speechSynthesis.cancel();
   
-    setLoading(true);
   
     const utterance = new SpeechSynthesisUtterance(response);
     const selectedVoice = voices.find((voice) => voice.lang.startsWith("en"));
@@ -52,13 +51,13 @@ function SearchAssistant() {
       utterance.voice = selectedVoice;
     }
   
-    utterance.onend = () => {
-      setLoading(false);
-    };
+    // utterance.onend = () => {
+    //   setLoading(false);
+    // };
   
-    utterance.onerror = () => {
-      setLoading(false);
-    };
+    // utterance.onerror = () => {
+    //   setLoading(false);
+    // };
   
     speechSynthesis.speak(utterance);
     setSpeech(utterance);
@@ -120,9 +119,10 @@ function SearchAssistant() {
             />
             <button
               onClick={handleVoiceInput}
-              className={`px-4 py-2 mr-2 text-white cursor-pointer rounded-full hover:bg-white hover:text-green-500 transition flex items-center gap-2 shadow-lg ${loading ? "bg-red-500" : "bg-green-500"}`}
+              disabled={loading}
+              className={`px-4 py-2 mr-2 text-white cursor-pointer rounded-full hover:bg-white hover:text-red-500 transition flex items-center gap-2 shadow-lg ${loading ? "bg-red-500" : "bg-green-500"}`}
             >
-              <FaMicrophone />
+              <FaMicrophone disabled={loading}/>
             </button>
             <button
               onClick={handleSearch}
