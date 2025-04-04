@@ -6,6 +6,7 @@ import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import re
 
 load_dotenv()
 
@@ -30,12 +31,13 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
 
-
-
 def scrape_stackoverflow(query: str) -> str:
+    """
+    Searches Stack Overflow for the most relevant answer.
+    """
     search_url = f"{STACK_EXCHANGE_API_BASE}/search?order=desc&sort=relevance&intitle={query}&site=stackoverflow"
     
-    print(f"🔍 Stack Overflow Search URL: {search_url}")
+    # print(f"🔍 Stack Overflow Search URL: {search_url}")
 
     try:
         response = requests.get(search_url).json()
@@ -48,7 +50,7 @@ def scrape_stackoverflow(query: str) -> str:
                     question_id = item.get("question_id")
                     break
             else:
-                return "No relevant answer found. Try rewording your query."
+                return None  
 
             answer_url = f"{STACK_EXCHANGE_API_BASE}/questions/{question_id}/answers?order=desc&sort=votes&site=stackoverflow&filter=withbody"
             
@@ -66,10 +68,8 @@ def scrape_stackoverflow(query: str) -> str:
         print("Error while fetching Stack Overflow data:", e)
         return "Error fetching data from Stack Overflow."
 
-    return "No relevant answer found. Try rewording your query."
+    return None 
 
-
-import re
 
 model = genai.GenerativeModel("gemini-2.0-flash", system_instruction="""
     AI Text Summarizer for Stack Overflow Answers
@@ -91,19 +91,17 @@ model = genai.GenerativeModel("gemini-2.0-flash", system_instruction="""
     - **Variable names must be bold (`**variable_name**`)**, NOT inside `inline code`.
     - **Loops and control structures** (e.g., `for loop`, `while loop`) should be bold for emphasis (`**for loop**`).
     - **Never format explanations as code.** Only the actual code itself should be inside a code block.
+    - **Do NOT include introductory phrases like**:  
+      - "Here's a simplified explanation of..."  
+      - "This is how it works..."  
+      - "Let me break it down..."  
+    - **Start directly with the explanation** without unnecessary introductions.
 """)
+
 
 def format_summary(response: str) -> str:
     """
-    Formats the AI-generated summary to:
-    - Ensure all code is inside a single code block.
-    - Bold variable names and keywords appropriately.
-
-    Args:
-        response (str): The AI-generated response.
-
-    Returns:
-        str: The formatted Markdown-compliant summary.
+    Formats the AI-generated summary for clarity, Markdown compliance, and proper code handling.
     """
     # Extract all code blocks
     code_blocks = re.findall(r"```[\s\S]*?```", response)
@@ -136,13 +134,6 @@ def summarize_text(query: str, text: str) -> str:
     """
     Summarizes a Stack Overflow response in a beginner-friendly manner 
     while keeping code snippets unchanged and ensuring proper Markdown formatting.
-
-    Args:
-        query (str): The user's original question.
-        text (str): The most relevant answer from Stack Overflow.
-
-    Returns:
-        str: A properly formatted Markdown summary.
     """
     prompt = f"""
         A user asked the following question:
@@ -165,11 +156,9 @@ def summarize_text(query: str, text: str) -> str:
     
     return format_summary(response.text.strip())
 
-
-
-
 @app.post("/ask")
 async def ask(request: QueryRequest):
+
     query = request.query.strip()
 
     if not query:
@@ -177,14 +166,28 @@ async def ask(request: QueryRequest):
 
     stackoverflow_answer = scrape_stackoverflow(query)
 
-    if stackoverflow_answer.startswith("No relevant answer found"):
-        return {"answer": "I couldn't find a relevant answer. Try rewording your question."}
-    
-    if stackoverflow_answer.startswith("Error fetching data"):
-        return {"answer": "There was an issue retrieving data. Please try again later."}
+    if not stackoverflow_answer:
 
+        ai_prompt = f"""
+        A user asked the following technical question:
+
+        "{query}"
+
+        No relevant answer was found on Stack Overflow. 
+        Provide a beginner-friendly explanation with proper Markdown formatting.
+        - Start with: "Okay, here's a beginner-friendly explanation of **{query}**, formatted for clarity and ease of understanding:"
+        - Maintain proper indentation for code.
+        - Format all code inside a single fenced code block (```) in the correct language.
+        - Make sure variable names are **bold** (e.g., **array** instead of `array`).
+    """
+        response = model.generate_content(ai_prompt)
+        ai_answer = format_summary(response.text.strip())
+        return {"answer": ai_answer}
+    
+    # If Stack Overflow has an answer, summarize it
     summarized_answer = summarize_text(query, stackoverflow_answer)
+    formatted_response = f"Okay, here's a beginner-friendly explanation of **{query}**, formatted for clarity and ease of understanding:\n\n{summarized_answer}"
     
-    return {"answer": summarized_answer}
+    return {"answer": formatted_response}
 
-# Run with: uvicorn server:app --reload
+# Run the server with: uvicorn server:app --reload

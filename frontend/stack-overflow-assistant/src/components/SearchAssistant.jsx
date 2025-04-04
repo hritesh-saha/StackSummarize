@@ -12,6 +12,7 @@ function SearchAssistant() {
   const [loading, setLoading] = useState(false);
   const [speech, setSpeech] = useState(null);
   const [voices, setVoices] = useState([]);
+  
 
   useEffect(() => {
     const updateVoices = () => {
@@ -39,19 +40,30 @@ function SearchAssistant() {
 
   const handleSpeak = () => {
     if (!response) return;
-
+  
     if (speech) speechSynthesis.cancel();
-
+  
+    setLoading(true);
+  
     const utterance = new SpeechSynthesisUtterance(response);
     const selectedVoice = voices.find((voice) => voice.lang.startsWith("en"));
-
+  
     if (selectedVoice) {
       utterance.voice = selectedVoice;
     }
-
+  
+    utterance.onend = () => {
+      setLoading(false);
+    };
+  
+    utterance.onerror = () => {
+      setLoading(false);
+    };
+  
     speechSynthesis.speak(utterance);
     setSpeech(utterance);
   };
+  
 
   const handleStop = () => {
     speechSynthesis.cancel();
@@ -108,7 +120,7 @@ function SearchAssistant() {
             />
             <button
               onClick={handleVoiceInput}
-              className="px-4 py-2 mr-2 bg-red-500 text-white cursor-pointer rounded-full hover:bg-red-600 transition flex items-center gap-2 shadow-lg"
+              className={`px-4 py-2 mr-2 text-white cursor-pointer rounded-full hover:bg-white hover:text-green-500 transition flex items-center gap-2 shadow-lg ${loading ? "bg-red-500" : "bg-green-500"}`}
             >
               <FaMicrophone />
             </button>
